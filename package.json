@@ -1,0 +1,42 @@
+{
+  "name": "gbf-battle",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Read-only GBF battle analysis, local battle history and response debug tools for Chrome MV3.",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20.9.0",
+    "npm": ">=10.0.0"
+  },
+  "scripts": {
+    "clean": "rimraf dist release .test-dist .release-dist",
+    "dev": "webpack --mode development --watch",
+    "build": "webpack --mode production",
+    "build:release": "webpack --mode production --env release",
+    "typecheck": "tsc --noEmit",
+    "test": "rimraf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/tests/background.test.js .test-dist/tests/battle.test.js .test-dist/tests/capture.test.js .test-dist/tests/content.test.js .test-dist/tests/page.test.js && rimraf .test-dist",
+    "check": "npm run test && npm run typecheck && npm run build",
+    "package": "npm run check && npm run build:release && node scripts/package.mjs"
+  },
+  "dependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/archiver": "^6.0.3",
+    "@types/chrome": "^0.0.320",
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "archiver": "^7.0.1",
+    "copy-webpack-plugin": "^14.0.0",
+    "css-loader": "^7.1.2",
+    "html-webpack-plugin": "^5.6.3",
+    "mini-css-extract-plugin": "^2.9.2",
+    "rimraf": "^6.0.1",
+    "ts-loader": "^9.5.2",
+    "typescript": "^5.8.3",
+    "webpack": "^5.99.0",
+    "webpack-cli": "^6.0.1"
+  }
+}

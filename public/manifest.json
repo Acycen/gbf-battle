@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "GBF Battle",
+  "short_name": "GBF Battle",
+  "version": "0.1.0",
+  "minimum_chrome_version": "111",
+  "description": "GBF 战斗详情、伤害统计、回合行动与本地战斗记录，被动监听并提供数据 Debug。",
+  "permissions": ["storage"],
+  "host_permissions": ["https://game.granbluefantasy.jp/*", "https://gbf.game.mbga.jp/*"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_title": "打开 GBF Battle" },
+  "content_scripts": [
+    {
+      "matches": ["https://game.granbluefantasy.jp/*", "https://gbf.game.mbga.jp/*"],
+      "all_frames": true,
+      "js": ["content.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://game.granbluefantasy.jp/*", "https://gbf.game.mbga.jp/*"],
+      "all_frames": true,
+      "js": ["page.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "default-src 'self'; script-src 'self'; img-src 'self' https://prd-game-a-granbluefantasy.akamaized.net; object-src 'none'; connect-src 'none'"
+  }
+}

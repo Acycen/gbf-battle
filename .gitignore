@@ -1,0 +1,16 @@
+node_modules/
+dist/
+release/
+coverage/
+.test-dist/
+.release-dist/
+*.log
+.DS_Store
+.idea/
+.vscode/
+*.local
+*.har
+fixtures/private/
+.npm-cache/
+output/
+.playwright-cli/
