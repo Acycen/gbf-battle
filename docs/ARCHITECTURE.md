@@ -56,7 +56,7 @@ flowchart LR
 
 ## 信任与容量
 
-MAIN 消息不可信，同源校验不构成真实性证明。background 只接收允许 origin 的 content sender 的采集消息，控制/导出请求只接收自身 panel 页面。外部 JSON 必须通过形状、深度和节点预算；后台重新脱敏并去除 URL 查询参数。sessionId 用于区分生命周期，不是页面无法读取的秘密。
+MAIN 消息不可信，同源校验不构成真实性证明。content 与 background 都会确认捕获 URL 的 origin 和发送页面一致，防止两个允许域名之间伪造来源；background 只接收允许 origin 的 content sender 的采集消息，控制/导出请求只接收自身 panel 页面。外部 JSON 必须通过形状、深度和节点预算；后台重新脱敏并去除 URL 查询参数。sessionId 用于区分生命周期，不是页面无法读取的秘密。
 
 | 数据 | 存储 | 限制 |
 | --- | --- | --- |

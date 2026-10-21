@@ -3,6 +3,7 @@ import type { CapturePayload } from "../model";
 import { emptyDamage, emptyTaken, type AttackSummary, type BattleAction, type BattleRecord, type BattleStore, type BattleTurn, type DamageKind, type TakenKind } from "./model";
 import { damageHits, flag, integer, list, name, newTurn, number, parseBosses, parseBuffs, parseFormation, parseOmens, parseParticipants, parsePlayers, parseSummons, percent, record, rows, sumHits, text } from "./parse";
 
+/** 本地历史和时间线采用双重上限：记录数控制列表，字节预算由 storage 再兜底。 */
 export const MAX_BATTLE_RECORDS = 10;
 export const MAX_BATTLE_BYTES = 2 * 1024 * 1024;
 export const MAX_TURNS = 200;
@@ -13,11 +14,16 @@ const RESULT_ROUTES: Record<string, BattleAction["kind"]> = {
   event_temporary_item_result: "item", user_recovery: "recovery"
 };
 
+/** 只识别 raid/multiraid 的直接 JSON 结果接口，其他路径交回 Debug。 */
 export function battleRoute(url: string): string | null {
   const path = new URL(url).pathname;
   return /^\/rest\/(?:raid|multiraid)\/([a-z_]+?)(?:\.json)?$/u.exec(path)?.[1] ?? null;
 }
 
+/**
+ * 指纹包含捕获时间、路径和正文哈希：同一桥接消息可去重，
+ * 但数值完全相同的下一次真实行动仍会因为 capturedAt 不同而累计。
+ */
 function fingerprint(payload: CapturePayload): string {
   const input = JSON.stringify(payload.body);
   let hash = 2166136261;
@@ -25,11 +31,16 @@ function fingerprint(payload: CapturePayload): string {
   return `${payload.capturedAt}:${new URL(payload.url).pathname}:${hash >>> 0}`;
 }
 
+/** 将外部角色编号限制到当前玩家数组；无法确认时返回 null。 */
 function actorIndex(value: unknown, battle: BattleRecord): number | null {
   const index = integer(value);
   return index !== null && battle.players[index] ? index : null;
 }
 
+/**
+ * 为独立的 damage/loop_damage 向前寻找最近的技能归属线索。
+ * wait 是行动边界；找不到可靠角色时归入 other/unattributed，避免猜错角色。
+ */
 function damageOwner(scenario: Record<string, unknown>[], index: number, battle: BattleRecord): { actor: number | null; kind: DamageKind } {
   let effectActor: number | null = null;
   for (let offset = index - 1; offset >= 0; offset -= 1) {
@@ -47,11 +58,16 @@ function damageOwner(scenario: Record<string, unknown>[], index: number, battle:
   return { actor: null, kind: "other" };
 }
 
+/** 归属不明时仍保留总量，不能静默丢弃伤害。 */
 function addDamage(battle: BattleRecord, actor: number | null, kind: DamageKind, amount: number): void {
   const totals = actor === null ? battle.unattributed : battle.players[actor]?.damage ?? battle.unattributed;
   totals[kind] += amount;
 }
 
+/**
+ * 承伤中的 pos 指响应发生前的前排槽位，因此必须在 applyStatus 换阵之前处理。
+ * 同一角色多段受击时，最后一个明确 hp 会自然成为当前状态。
+ */
 function addTaken(battle: BattleRecord, value: unknown, kind: TakenKind): void {
   for (const hit of damageHits(value)) {
     const player = hit.pos === null ? null : battle.players[battle.formation[hit.pos] ?? -1];
@@ -60,13 +76,19 @@ function addTaken(battle: BattleRecord, value: unknown, kind: TakenKind): void {
   }
 }
 
+/** 累计统计包含角色与未归属桶，供摘要和请求级增量共同使用。 */
 export function totalDamage(battle: BattleRecord): number {
   return [...battle.players.map((player) => player.damage), battle.unattributed].reduce((total, damage) => total + Object.values(damage).reduce((sum, value) => sum + value, 0), 0);
 }
+/** 承伤总计同样包含无法定位前排槽位的未归属数值。 */
 export function totalTaken(battle: BattleRecord): number {
   return [...battle.players.map((player) => player.taken), battle.unattributedTaken].reduce((total, taken) => total + Object.values(taken).reduce((sum, value) => sum + value, 0), 0);
 }
 
+/**
+ * 按 scenario 原始顺序累计一条响应。
+ * 先处理玩家阶段伤害，再处理 Boss 行动和状态命令；遇到 boss turn 后的数值不进入攻击摘要。
+ */
 function applyScenario(battle: BattleRecord, scenario: Record<string, unknown>[], kind: BattleAction["kind"], turn: BattleTurn): AttackSummary {
   const summary: AttackSummary = { hits: 0, total: 0, ability: 0, special: 0, chain: 0 };
   let playerPhase = true;
@@ -76,6 +98,7 @@ function applyScenario(battle: BattleRecord, scenario: Record<string, unknown>[]
     if (cmd === "turn" && action.mode === "boss") playerPhase = false;
     if (cmd === "contribution") battle.contribution += number(action.amount) ?? 0;
     if (cmd === "ability" && action.to !== "boss") {
+      // 同一技能响应可能含重复 ability 标记，按角色和技能键只计一次使用次数。
       const actor = actorIndex(action.num, battle);
       const key = `${actor}:${text(action.ability_id) || name(action.name)}`;
       if (actor !== null && !abilityUses.has(key)) { battle.players[actor]!.abilityUses += 1; abilityUses.add(key); }
@@ -91,6 +114,7 @@ function applyScenario(battle: BattleRecord, scenario: Record<string, unknown>[]
       if (actor !== null && !action.effect && scenario[index + 1]?.cmd === "normal_attack_end") {
         const attacks = integer(action.total_attack_num);
         const alive = damageHits(action.damage).every((hit) => hit.hp !== 0);
+        // 击杀会截断连击；除明确 TA 外，不把截断结果误计为 SA/DA。
         if ((alive || attacks === 3) && attacks !== null && attacks >= 1 && attacks <= 3) {
           const stats = battle.players[actor]!.attacks;
           stats.total += 1;
@@ -107,6 +131,7 @@ function applyScenario(battle: BattleRecord, scenario: Record<string, unknown>[]
       addDamage(battle, actor, damageKind, outgoing);
       if (playerPhase) summary.chain += 1;
     } else if ((cmd === "damage" || cmd === "loop_damage") && action.to === "boss") {
+      // 召唤/Fatal Chain 按迁移约定统一记到主人公“其他”，其余再检查 scenario 线索。
       const owner = kind === "summon" || kind === "fatal-chain" ? { actor: 0, kind: "other" as const } : damageOwner(scenario, index, battle);
       outgoing = sumHits(action.list); damageKind = owner.kind;
       hits = damageHits(action.list).filter((hit) => hit.value > 0).length;
@@ -153,6 +178,10 @@ function applyScenario(battle: BattleRecord, scenario: Record<string, unknown>[]
   return summary;
 }
 
+/**
+ * 应用响应尾部 status 和 scenario 中的 condition。
+ * 状态发生在伤害结算之后，因此这里才更新阵型、Guard、预兆和召唤冷却。
+ */
 function applyStatus(battle: BattleRecord, status: Record<string, unknown>, scenario: Record<string, unknown>[], turn: BattleTurn, at: string): void {
   const timer = number(status.timer);
   if (timer !== null) { battle.timer = timer; battle.timerUpdatedAt = at; }
@@ -186,6 +215,7 @@ function applyStatus(battle: BattleRecord, status: Record<string, unknown>, scen
   if (supporter && isRecord(status.supporter) && "recast" in status.supporter) supporter.cooldown = text(status.supporter.recast) || null;
 }
 
+/** start.json 是创建战斗的唯一入口；缺少 raid、Boss 或角色时拒绝建档。 */
 function createBattle(body: Record<string, unknown>, at: string): BattleRecord | null {
   const raidId = text(body.raid_id);
   const bosses = parseBosses(body.boss);
@@ -208,6 +238,10 @@ function createBattle(body: Record<string, unknown>, at: string): BattleRecord |
   };
 }
 
+/**
+ * 同一 raid 再次收到 start 视为刷新/重进：用新响应覆盖瞬时状态，
+ * 保留此前累计伤害、承伤和时间线，且标记统计可能存在观察缺口。
+ */
 function refreshBattle(battle: BattleRecord, body: Record<string, unknown>): void {
   const freshPlayers = parsePlayers(body.player);
   const freshBosses = parseBosses(body.boss);
@@ -226,6 +260,7 @@ function refreshBattle(battle: BattleRecord, body: Record<string, unknown>): voi
   battle.participants = parseParticipants(body.multi_raid_member_info);
 }
 
+/** 从最旧回合和最旧行动开始裁剪；累计值与最新状态始终保留。 */
 function limitTimeline(battle: BattleRecord): void {
   while (battle.turns.length > MAX_TURNS) { battle.turns.shift(); battle.timelineTruncated = true; }
   let total = battle.turns.reduce((sum, turn) => sum + turn.actions.length, 0);
@@ -237,7 +272,13 @@ function limitTimeline(battle: BattleRecord): void {
   battle.fingerprints = battle.fingerprints.slice(-256);
 }
 
-/** 迁移 Tarou 的 start / scenario 处理；外部输入始终经过窄投影，不保存账号资料。 */
+/**
+ * 纯函数式地把一条脱敏捕获归并进战斗仓库。
+ *
+ * 处理顺序固定为：校验路由和战斗归属 → 克隆已有记录 → 累计旧阵型下的 scenario →
+ * 应用响应后状态 → 记录请求级行动 → 创建下一回合 → 裁剪时间线。
+ * 外部输入始终经过窄投影，不保存账号资料；无效或无法归属的响应返回原 store 引用。
+ */
 export function reduceBattle(store: BattleStore, payload: CapturePayload): BattleStore {
   if (payload.status < 200 || payload.status >= 300 || payload.truncated || !isRecord(payload.body)) return store;
   const resultId = /^\/result(?:multi)?\/content\/(?:index|skip_raid)\/([0-9]+)(?:\/|$)/u.exec(new URL(payload.url).pathname)?.[1];
@@ -258,6 +299,7 @@ export function reduceBattle(store: BattleStore, payload: CapturePayload): Battl
   const created = route === "start" && !previous ? createBattle(body, payload.capturedAt) : null;
   if (!previous && !created) return store;
   if (route !== "start" && !Array.isArray(body.scenario) && route !== "guard_setting" && route !== "special_skill_setting") return store;
+  // 只克隆将要修改的一场战斗，保证失败或忽略响应时原仓库不被部分写入。
   const battle = created ?? structuredClone(previous!);
   const status = record(body.status);
   if (route === "start" && previous) refreshBattle(battle, body);
@@ -272,6 +314,7 @@ export function reduceBattle(store: BattleStore, payload: CapturePayload): Battl
   const before = totalDamage(battle);
   const beforeTaken = totalTaken(battle);
   if (!(route === "start" && previous)) {
+    // 刷新 start 的 scenario 常含已发生行动，重放会造成累计翻倍，因此只合并状态。
     const attack = applyScenario(battle, scenario, kind, turn);
     if (kind === "attack") turn.attack = attack;
   }
@@ -297,6 +340,7 @@ export function reduceBattle(store: BattleStore, payload: CapturePayload): Battl
     };
     turn.actions.push(action);
   }
+  // 当前响应仍属于旧回合；status.turn 变化后再建立等待后续行动的新回合。
   if (battle.turn !== turn.turn && battle.outcome === "active") battle.turns.push(newTurn(battle.turn, battle.bosses, battle.formation, effectiveStatus, turn));
   const boss = battle.bosses.find((item) => item.hp !== 0) ?? battle.bosses[0];
   if (boss) battle.turns.at(-1)!.hpPercent = percent(boss.hp, boss.maxHp);

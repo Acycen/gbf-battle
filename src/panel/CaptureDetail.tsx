@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import type { DebugCapture } from "../domain/model";
 import { downloadJson, formatBytes } from "./api";
 
+/** 按 id 获取单条正文，避免 STATE_UPDATED 广播携带大 JSON。 */
 export function CaptureDetail({ id }: { id: string }): React.JSX.Element {
   const [capture, setCapture] = useState<DebugCapture | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
+    // 组件切换记录或卸载后忽略旧请求结果，防止详情短暂串位。
     let active = true;
     void chrome.runtime.sendMessage({ type: "GET_CAPTURE", id }).then((result: DebugCapture | null) => {
       if (!active) return;

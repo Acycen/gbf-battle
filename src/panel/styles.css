@@ -1,3 +1,4 @@
+/* 全局暗色主题、尺寸基线和键盘焦点。 */
 :root { color-scheme: dark; font-family: "Segoe UI", "Microsoft YaHei", sans-serif; font-size: 12px; line-height: 1.5; color: #cfd3dc; background: #141414; font-synthesis: none; --border: #414243; --muted: #909399; --panel: #1d1e1f; --accent: #409eff; }
 * { box-sizing: border-box; }
 html, body, #root { width: 100%; height: 100%; margin: 0; }
@@ -10,6 +11,7 @@ button:disabled { opacity: .4; cursor: default; }
 button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible, pre:focus-visible { outline: 2px solid #79bbff; outline-offset: 2px; }
 h1, h2, h3, h4, p { margin: 0; }
 h2, h3 { font-size: 13px; font-weight: 500; }
+/* 固定右侧导航，主内容区独立滚动以适应 360px 窄窗口。 */
 .app { width: 100%; height: 100dvh; display: flex; }
 .panel-content { flex: 1; min-width: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #555 transparent; }
 .topbar { display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 6px 10px; border-bottom: 1px solid #303133; }
@@ -27,6 +29,7 @@ h2, h3 { font-size: 13px; font-weight: 500; }
 .main-nav svg { display: block; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .main-nav small { position: absolute; right: 0; top: -3px; min-width: 12px; padding: 0 2px; font-size: 9px; background: #525252; color: #dcdfe6; border-radius: 6px; }
 .nav-version { margin-top: auto; font-size: 9px; color: #909399; }
+/* 监听来源与开始/停止控制。 */
 .toolbar { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 8px 10px; border-bottom: 1px solid #303133; }
 .tab-picker { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 3px; font-size: 10px; color: var(--muted); }
 .tab-picker select { width: 100%; min-width: 0; font-size: 11px; }
@@ -34,6 +37,7 @@ h2, h3 { font-size: 13px; font-weight: 500; }
 .primary { color: #fff; background: #3375b9; border-color: #409eff; }
 .danger { color: #f89898; }
 .debug-tools { display: flex; gap: 6px; padding: 8px 10px 0; }
+/* 战斗主体保持 Tarou 风格的约 300px 卡片宽度。 */
 .battle-panel { width: 100%; max-width: 320px; margin: 0 auto; padding: 10px; }
 .battle-detail { min-width: 0; }
 .battle-detail-content { display: flex; flex-direction: column; gap: 10px; }
@@ -62,6 +66,7 @@ h2, h3 { font-size: 13px; font-weight: 500; }
 .outcome-won { color: #95d475; }
 .outcome-lost { color: #f89898; }
 .outcome-finished { color: #b1a5de; }
+/* 远程战斗资源失败时，图标占位仍保持原布局尺寸。 */
 .battle-icon { width: 42px; height: 42px; border-radius: 3px; object-fit: cover; flex-shrink: 0; }
 .icon-fallback { display: inline-grid; place-items: center; font-size: 18px; background: #333639; color: #a6a9ad; }
 .buff-list { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 6px; align-items: center; min-width: 0; }
@@ -71,6 +76,7 @@ h2, h3 { font-size: 13px; font-weight: 500; }
 .buff small { position: absolute; bottom: -2px; right: 0; color: #fff; max-width: 24px; overflow: hidden; font-size: 9px; line-height: 12px; text-shadow: 0 1px 2px #000; background: #0009; border-radius: 2px; padding: 0 1px; }
 .muted { font-size: 10px; color: #73767a; }
 .analysis-card { background: var(--panel); border: 1px solid var(--border); border-radius: 5px; padding: 5px; min-width: 0; }
+/* 伤害、承伤、角色状态与行动的详情切换区。 */
 .battle-tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
 .battle-tabs button { flex: 1; min-width: 0; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; padding: 7px 1px; font-size: 11px; color: #a6a9ad; white-space: nowrap; }
 .battle-tabs button[aria-pressed="true"] { color: var(--accent); border-bottom-color: var(--accent); }
@@ -105,6 +111,7 @@ progress::-webkit-progress-value { background: #e6a23c; border-radius: 4px; }
 .damage-breakdown { display: flex; flex-wrap: wrap; gap: 5px 10px; font-size: 10px; color: var(--muted); margin-top: 6px; }
 .damage-breakdown strong { color: #cfd3dc; font-weight: 400; margin-left: 4px; }
 .statistics > .damage-breakdown { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* 当前阵型优先的角色状态列表。 */
 .player-status-grid { display: flex; flex-direction: column; gap: 6px; }
 .player-status { background: #262626; padding: 6px; border-radius: 4px; min-width: 0; }
 .player-cell { display: flex; align-items: center; gap: 6px; min-width: 0; }
@@ -113,6 +120,7 @@ progress::-webkit-progress-value { background: #e6a23c; border-radius: 4px; }
 .player-cell small { display: block; font-size: 9px; color: var(--muted); }
 .player-cell .battle-icon { width: 36px; height: 36px; }
 .battle-note { font-size: 10px; color: #73767a; line-height: 1.65; margin-top: 6px; }
+/* 回合卡片包含预兆、请求级行动和普通攻击摘要。 */
 .turn-list { display: flex; flex-direction: column; gap: 7px; }
 .turn-card { border: 1px solid var(--border); background: #202121; border-radius: 4px; overflow: hidden; }
 .turn-header { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 6px; font-size: 10px; background: #303133; color: #a6a9ad; }
@@ -146,6 +154,7 @@ summary { cursor: pointer; overflow-wrap: anywhere; }
 .battle-metrics strong { display: block; color: #cfd3dc; font-size: 11px; font-weight: 400; overflow-wrap: anywhere; }
 .record-detail-tools { display: flex; justify-content: center; padding-top: 10px; }
 .record-detail-tools button { font-size: 11px; }
+/* 本地战斗历史的搜索、管理与摘要卡片。 */
 .history-heading { display: flex; align-items: center; min-height: 26px; margin-bottom: 7px; }
 .history-heading h2 { font-size: 13px; }
 .history-heading small { font-size: 10px; color: var(--muted); margin-left: 5px; }
@@ -165,6 +174,7 @@ summary { cursor: pointer; overflow-wrap: anywhere; }
 .history-card-footer { display: flex; align-items: center; justify-content: space-between; gap: 5px; padding-top: 5px; }
 .history-card-footer time { font-size: 10px; color: var(--muted); }
 .history-card-footer > span { font-size: 10px; color: #79bbff; padding: 2px 6px; border: 1px solid #3375b9; border-radius: 3px; }
+/* Debug 元数据、筛选列表和按需加载的 JSON 详情。 */
 .stats { display: flex; flex-wrap: wrap; gap: 6px 15px; margin: 10px; padding: 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--panel); }
 .stats > div > span { display: block; color: var(--muted); font-size: 10px; }
 .stats strong { color: #dcdfe6; font-size: 14px; font-weight: 400; }
@@ -209,6 +219,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .battle-panel > .notice.error { margin: 0 0 10px; }
 .compact-notice { padding: 4px 6px; }
 footer { text-align: center; padding: 12px 6px; color: #606266; font-size: 9px; }
+/* 宽窗口仅扩展 Debug 为双栏，战斗卡片仍保持窄版阅读宽度。 */
 @media (min-width: 760px) {
   .view-debug .workspace { grid-template-columns: minmax(250px, 36%) minmax(0, 1fr); }
   .view-debug .capture-detail { border-top: 0; border-left: 1px solid var(--border); }
@@ -216,6 +227,7 @@ footer { text-align: center; padding: 12px 6px; color: #606266; font-size: 9px; 
   .view-debug .json { max-height: 65vh; }
   .toolbar { max-width: 500px; margin: 0 auto; }
 }
+/* 极窄弹窗压缩间距和 Boss 环内文字，避免横向滚动。 */
 @media (max-width: 320px) {
   .battle-panel { padding: 6px; }
   .topbar { gap: 4px; padding: 6px; }
@@ -227,4 +239,5 @@ footer { text-align: center; padding: 12px 6px; color: #606266; font-size: 9px; 
   .boss-orbit-content { inset: 25px 20px; gap: 5px; }
   .battle-tabs button { font-size: 10px; }
 }
+/* 尊重系统减少动态效果设置。 */
 @media (prefers-reduced-motion: reduce) { .ring-value { transition: none; } }

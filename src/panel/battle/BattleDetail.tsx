@@ -4,6 +4,7 @@ import type { BattleBuff, BattlePlayer, BattleRecord, DamageKind, TakenKind } fr
 import { summarizeBattle } from "../../domain/battle/storage";
 import { amount, assetUrl, duration, OUTCOMES } from "./format";
 
+/** 远程图片失败或资源 ID 无效时使用文本占位，保证详情仍可阅读。 */
 function Portrait({ kind, id, label }: { kind: "enemy" | "npc" | "leader" | "buff"; id: string; label: string }): React.JSX.Element {
   const [failed, setFailed] = useState(false);
   const src = assetUrl(kind, id);
@@ -12,6 +13,7 @@ function Portrait({ kind, id, label }: { kind: "enemy" | "npc" | "leader" | "buf
     <span className={`${iconClass} icon-fallback`} aria-label={label}>{kind === "buff" ? "◇" : label.slice(0, 1)}</span>;
 }
 
+/** 状态图标只呈现已观察到的最近快照，完整说明放在 title 中。 */
 function BuffList({ buffs }: { buffs: BattleBuff[] }): React.JSX.Element {
   return <div className="buff-list">{buffs.length ? buffs.map((buff) => <span key={buff.id} className={`buff ${buff.debuff ? "debuff" : ""}`} title={`${buff.name}\n${buff.detail}${buff.remaining !== null ? `\n剩余 ${buff.remaining}` : ""}`} aria-label={buff.name}>
     <Portrait kind="buff" id={buff.id} label={buff.name} />{buff.remaining !== null ? <small>{buff.remaining}</small> : null}
@@ -20,6 +22,7 @@ function BuffList({ buffs }: { buffs: BattleBuff[] }): React.JSX.Element {
 
 const DAMAGE_LABELS: Record<DamageKind, string> = { attack: "普攻 / 反击", ability: "技能", special: "奥义", other: "其他" };
 const TAKEN_LABELS: Record<TakenKind, string> = { attack: "普攻 / 反击", super: "特动", other: "其他" };
+/** 伤害与承伤共用统计视图；未归属桶参与总量但单独展示。 */
 function Statistics({ battle, taken }: { battle: BattleRecord; taken: boolean }): React.JSX.Element {
   const [category, setCategory] = useState("total");
   const labels: Record<string, string> = taken ? TAKEN_LABELS : DAMAGE_LABELS;
@@ -48,6 +51,7 @@ function Statistics({ battle, taken }: { battle: BattleRecord; taken: boolean })
   </section>;
 }
 
+/** 角色按当前前排顺序优先排列，后排保持原 players 顺序。 */
 function PlayerStatus({ battle }: { battle: BattleRecord }): React.JSX.Element {
   const [frontOnly, setFrontOnly] = useState(true);
   const ordered = [...battle.formation, ...battle.players.map((player) => player.index).filter((index) => !battle.formation.includes(index))];
@@ -60,6 +64,7 @@ function PlayerStatus({ battle }: { battle: BattleRecord }): React.JSX.Element {
   </section>;
 }
 
+/** 展示按回合保存的请求级行动；反转时复制数组以避免修改领域对象。 */
 export function ActionTimeline({ battle }: { battle: BattleRecord }): React.JSX.Element {
   const [reverse, setReverse] = useState(true);
   const turns = reverse ? [...battle.turns].reverse() : battle.turns;
@@ -77,15 +82,18 @@ export function ActionTimeline({ battle }: { battle: BattleRecord }): React.JSX.
   </section>;
 }
 
+/** 战斗详情总视图，同时计算两个明确响应时间点之间的本地倒计时显示。 */
 export function BattleDetail({ battle, live = false }: { battle: BattleRecord; live?: boolean }): React.JSX.Element {
   const [tab, setTab] = useState("damage");
   const [clock, setClock] = useState(Date.now());
   useEffect(() => {
+    // 已结束或历史详情不需要每秒重渲染。
     if (!live || battle.outcome !== "active") return;
     const timer = setInterval(() => setClock(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [live, battle.outcome]);
   const summary = summarizeBattle(battle);
+  // 仅对正在监听的活动战斗外推倒计时；历史记录保持最后捕获值。
   const elapsedSince = (at: string) => live && battle.outcome === "active" ? Math.max(0, (clock - Date.parse(at)) / 1000) : 0;
   const elapsed = elapsedSince(battle.timerUpdatedAt);
   const remaining = battle.timer === null ? null : Math.max(0, battle.timer - elapsed);

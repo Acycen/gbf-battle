@@ -1,16 +1,22 @@
 import { createPayload, isGameUrl, MAX_RESPONSE_BYTES } from "../domain/capture";
 import { CONTENT_CHANNEL, isListenerControl, PAGE_CHANNEL, type PageMessage } from "../shared/protocol";
 
+/**
+ * MAIN world 被动采集器。
+ * 只包装游戏原本发起的 fetch/XHR，并复制已经返回的 JSON；本文件不会主动创建游戏请求。
+ */
 const originalFetch = window.fetch;
 const originalOpen = XMLHttpRequest.prototype.open;
 const originalSend = XMLHttpRequest.prototype.send;
 const requests = new WeakMap<XMLHttpRequest, { method: string; url: string }>();
 let sessionId: string | null = null;
 
+/** 将相对 URL 按当前游戏页面解析，保持浏览器原有请求语义。 */
 function resolveUrl(value: string): string {
   return new URL(value, window.location.href).href;
 }
 
+/** 在同一监听会话内构造已脱敏载荷，并单向发送给 ISOLATED world。 */
 function emit(url: string, status: number, body: unknown, method: string, source: "fetch" | "xhr", startedSession: string): void {
   if (sessionId !== startedSession) return;
   try {
@@ -21,6 +27,10 @@ function emit(url: string, status: number, body: unknown, method: string, source
   } catch { /* 调试失败不得改变游戏响应。 */ }
 }
 
+/**
+ * 读取 fetch clone 的流并在 2 MiB 时提前退出。
+ * 使用流而非 response.json()，才能在解析前执行读取预算。
+ */
 async function readJson(response: Response): Promise<unknown> {
   const reader = response.body?.getReader();
   if (!reader) throw new Error("Empty response");
@@ -68,6 +78,7 @@ window.fetch = function (this: Window, ...args: Parameters<typeof window.fetch>)
 };
 
 type OpenArguments = [method: string, url: string | URL, async?: boolean, username?: string | null, password?: string | null];
+/** 先保持原生 open 行为，再为允许域名保存最少的请求元数据。 */
 XMLHttpRequest.prototype.open = function (this: XMLHttpRequest, ...args: OpenArguments): void {
   Reflect.apply(originalOpen, this, args);
   requests.delete(this);
@@ -77,6 +88,7 @@ XMLHttpRequest.prototype.open = function (this: XMLHttpRequest, ...args: OpenArg
   } catch { /* 交给原生 open 处理 URL 语义。 */ }
 } as XMLHttpRequest["open"];
 
+/** 监听游戏 XHR 的 load 事件；send 失败时同步移除临时监听器并原样抛错。 */
 XMLHttpRequest.prototype.send = function (this: XMLHttpRequest, ...args: Parameters<XMLHttpRequest["send"]>): void {
   const metadata = requests.get(this);
   const startedSession = sessionId;
@@ -113,5 +125,6 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
   sessionId = event.data.command === "START" ? event.data.sessionId : null;
 });
 
+// 通知 content MAIN 包装器已经安装；content 会返回当前 START/STOP 状态。
 const ready: PageMessage = { channel: PAGE_CHANNEL, type: "PAGE_BRIDGE_READY" };
 window.postMessage(ready, window.location.origin);

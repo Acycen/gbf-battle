@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import archiver from "archiver";
 
+/** 发布脚本只打包经过 release 构建的目录，并在压缩前检查关键产物。 */
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 const dist = path.join(root, ".release-dist");
@@ -17,6 +18,7 @@ const release = path.join(root, "release");
 fs.mkdirSync(release, { recursive: true });
 const output = fs.createWriteStream(path.join(release, `gbf-battle-v${packageJson.version}.zip`));
 const archive = archiver("zip", { zlib: { level: 9 } });
+// 同时监听输出流和归档器，避免磁盘或压缩警告生成看似成功的不完整 ZIP。
 const finished = new Promise((resolve, reject) => {
   output.on("close", resolve);
   output.on("error", reject);

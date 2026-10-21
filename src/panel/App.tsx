@@ -1,13 +1,23 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { isRecord, MAX_CAPTURE_COUNT, MAX_STORAGE_BYTES } from "../domain/capture";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { isRecord } from "../domain/capture";
 import type { DebugCapture, DebugSnapshot } from "../domain/model";
 import type { GameTabInfo, PanelRequest } from "../shared/protocol";
-import { CaptureDetail } from "./CaptureDetail";
-import { downloadJson, formatBytes, request } from "./api";
-import { BattlePanel } from "./battle/BattlePanel";
+import { downloadJson, request } from "./api";
+
+const DebugPanel = lazy(async () => {
+  const module = await import(/* webpackChunkName: "debug-panel" */ "./DebugPanel");
+  return { default: module.DebugPanel };
+});
+
+// 战斗和 Debug 视图占面板的大部分代码；拆为扩展内本地 chunk，让外壳先完成解析。
+const BattlePanel = lazy(async () => {
+  const module = await import(/* webpackChunkName: "battle-panel" */ "./battle/BattlePanel");
+  return { default: module.BattlePanel };
+});
 
 const INITIAL: DebugSnapshot = { battle: { currentId: null, records: [], error: null }, captures: [], error: null, listening: false, revision: -1, tabId: null, storedBytes: 0 };
 
+/** 面板外壳负责监听控制、视图导航和最新后台快照，业务详情由子视图按需加载。 */
 export function App(): React.JSX.Element {
   const [view, setView] = useState<"battle" | "history" | "debug">("battle");
   const [state, setState] = useState(INITIAL);
@@ -15,20 +25,18 @@ export function App(): React.JSX.Element {
   const revision = useRef(-1);
   const [tabs, setTabs] = useState<GameTabInfo[]>([]);
   const [tabId, setTabId] = useState<number | null>(null);
-  const [filter, setFilter] = useState("");
-  const [source, setSource] = useState("all");
-  const [status, setStatus] = useState("all");
-  const [selection, setSelection] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showControls, setShowControls] = useState(true);
   useEffect(() => setShowControls(!state.listening), [state.listening]);
   useEffect(() => contentRef.current?.scrollTo({ top: 0 }), [view]);
+  /** 忽略晚到的旧快照，避免命令响应覆盖更新更晚的广播。 */
   const apply = useCallback((next: DebugSnapshot) => {
     if (next.revision < revision.current) return;
     revision.current = next.revision;
     setState(next);
   }, []);
+  /** 标签页消失后自动回退到查询结果中的第一个合法来源。 */
   const refreshTabs = useCallback(async () => {
     const next = await request<GameTabInfo[]>({ type: "GET_GAME_TABS" });
     setTabs(next);
@@ -36,6 +44,7 @@ export function App(): React.JSX.Element {
   }, []);
 
   useEffect(() => {
+    // 初始查询和后续广播共用 apply，因此 revision 顺序规则始终一致。
     const listener = (message: unknown, sender: chrome.runtime.MessageSender): void => {
       if (sender.id === chrome.runtime.id && isRecord(message) && message.type === "STATE_UPDATED" && isRecord(message.snapshot)) apply(message.snapshot as unknown as DebugSnapshot);
     };
@@ -45,18 +54,15 @@ export function App(): React.JSX.Element {
     return () => chrome.runtime.onMessage.removeListener(listener);
   }, [apply, refreshTabs]);
 
+  /** 为按钮操作提供统一的忙碌状态和用户可读错误。 */
   async function run(work: () => Promise<void>): Promise<void> {
     setBusy(true);
     setError(null);
     try { await work(); } catch (reason: unknown) { setError(reason instanceof Error ? reason.message : "操作失败。"); }
     finally { setBusy(false); }
   }
+  /** 改变后台状态的命令会返回新快照，立即应用可缩短 UI 等待广播的时间。 */
   async function command(message: PanelRequest): Promise<void> { apply(await request<DebugSnapshot>(message)); }
-  const visible = state.captures.filter((capture) =>
-    capture.url.toLowerCase().includes(filter.trim().toLowerCase()) && (source === "all" || capture.source === source) &&
-    (status === "all" || status === "error" && capture.status >= 400 || status === "success" && capture.status >= 200 && capture.status < 400));
-  const selected = visible.find((capture) => capture.id === selection) ?? visible[0];
-
   return <div className={`app view-${view}`}><div className="panel-content" ref={contentRef}>
     <header className="topbar">
       <h1>GBF Battle</h1>
@@ -81,33 +87,7 @@ export function App(): React.JSX.Element {
       </div> : null}
     {error || state.error ? <div className="notice error" role="alert">{error ?? state.error}</div> : null}
 
-    {view === "debug" ? <>
-
-    <div className="stats" aria-label="采集统计">
-      <div><span>保留响应</span><strong>{state.captures.length}<small> / {MAX_CAPTURE_COUNT}</small></strong></div>
-      <div><span>会话占用</span><strong>{formatBytes(state.storedBytes)}<small> / {formatBytes(MAX_STORAGE_BYTES)}</small></strong></div>
-      <div><span>最近捕获</span><strong>{state.captures[0] ? new Date(state.captures[0].capturedAt).toLocaleTimeString("zh-CN", { hour12: false }) : "—"}</strong></div>
-      <p>仅观察游戏页面已收到的 JSON 响应。URL 查询参数、认证字段和常见账号标识会被脱敏。</p>
-    </div>
-
-    <main className="workspace">
-      <section className="capture-list" aria-label="响应列表">
-        <div className="list-heading"><h2>网络响应</h2><span>{visible.length} 条</span></div>
-        <div className="filters">
-          <input aria-label="筛选接口 URL" placeholder="搜索接口路径…" value={filter} onChange={(event) => setFilter(event.target.value)} />
-          <div><select aria-label="请求来源" value={source} onChange={(event) => setSource(event.target.value)}><option value="all">全部来源</option><option value="fetch">Fetch</option><option value="xhr">XHR</option></select>
-            <select aria-label="响应状态" value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">全部状态</option><option value="success">2xx / 3xx</option><option value="error">4xx / 5xx</option></select></div>
-        </div>
-        <div className="rows">
-          {!visible.length ? <div className="empty"><span className="empty-icon" aria-hidden="true">{state.captures.length ? "⌕" : "{ }"}</span><h3>{state.captures.length ? "没有匹配的响应" : "等待数据到达"}</h3><p>{state.listening ? "在游戏页面手动操作后，新响应会显示在这里。" : "选择游戏标签页并开始监听。"}</p></div> : visible.map((capture) => <button className={`capture-row ${capture.id === selected?.id ? "selected" : ""}`} key={capture.id} onClick={() => setSelection(capture.id)} aria-pressed={capture.id === selected?.id}>
-            <div><span className={`http-status ${capture.status >= 400 ? "failed" : ""}`}>{capture.status}</span><span className="method">{capture.method}</span><time>{new Date(capture.capturedAt).toLocaleTimeString("zh-CN", { hour12: false })}</time></div>
-            <span className="path mono">{new URL(capture.url).pathname}</span><span className="row-foot">{capture.source.toUpperCase()} · {formatBytes(capture.bodyBytes)}{capture.truncated ? " · 正文已省略" : ""}</span>
-          </button>)}
-        </div>
-      </section>
-      <section className="capture-detail" aria-label="响应详情">{selected ? <CaptureDetail key={selected.id} id={selected.id} /> : <div className="empty detail-empty"><span className="empty-icon" aria-hidden="true">&lt;/&gt;</span><h3>查看响应 JSON</h3><p>从左侧选择一条响应，查看脱敏后的数据。</p></div>}</section>
-    </main>
-    </> : <BattlePanel state={state.battle} revision={state.revision} mode={view} listening={state.listening} onSnapshot={apply} />}
+    {view === "debug" ? <Suspense fallback={<p className="empty">正在加载 Debug 视图…</p>}><DebugPanel state={state} /></Suspense> : <Suspense fallback={<p className="empty">正在加载战斗视图…</p>}><BattlePanel state={state.battle} revision={state.revision} mode={view} listening={state.listening} onSnapshot={apply} /></Suspense>}
     <footer>战斗记录保留 10 场 · Debug 仅本次会话</footer>
     </div><nav className="main-nav" aria-label="功能模块">
       <span className="nav-brand" aria-hidden="true">GB</span>

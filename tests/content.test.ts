@@ -46,6 +46,7 @@ test("content 校验来源与协议，迟到握手不能覆盖用户停止指令
   dispatch(capture, fakeWindow.location.origin, {});
   dispatch({ ...capture, channel: "other" });
   dispatch({ ...capture, payload: { ...payload, url: "https://example.com" } });
+  dispatch({ ...capture, payload: { ...payload, url: "https://gbf.game.mbga.jp/debug/example" } });
   assert.equal(sent.length, 2);
   dispatch(capture);
   assert.deepEqual(sent[2], { type: "AJAX_CAPTURED", payload });

@@ -6,6 +6,7 @@ import MiniCssExtractPlugin from "mini-css-extract-plugin";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 
+/** 四个 Manifest 执行环境保持独立入口，release 构建额外关闭 source map。 */
 export default (environment = {}, argv = {}) => ({
   mode: argv.mode === "production" ? "production" : "development",
   entry: {
@@ -17,6 +18,8 @@ export default (environment = {}, argv = {}) => ({
   output: {
     path: path.join(root, environment.release ? ".release-dist" : "dist"),
     filename: "[name].js",
+    // React.lazy 产生的面板子视图必须是扩展包内的稳定本地文件名。
+    chunkFilename: "[name].js",
     clean: true
   },
   devtool: environment.release ? false : "source-map",

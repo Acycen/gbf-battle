@@ -6,10 +6,12 @@ import { downloadJson, request } from "../api";
 import { BattleDetail } from "./BattleDetail";
 import { amount, duration, OUTCOMES } from "./format";
 
+/** 详情按 raidId 从后台读取；revision 变化时刷新活动战斗的实时内容。 */
 function LoadedDetail({ raidId, revision, live }: { raidId: string; revision: number; live: boolean }): React.JSX.Element {
   const [battle, setBattle] = useState<BattleRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
+    // 旧 raid 请求完成时组件可能已切换，active 防止覆盖新选择。
     let active = true;
     void chrome.runtime.sendMessage({ type: "GET_BATTLE_RECORD", raidId }).then((result: BattleRecord | null) => {
       if (!active) return;
@@ -23,6 +25,7 @@ function LoadedDetail({ raidId, revision, live }: { raidId: string; revision: nu
   return <><BattleDetail battle={battle} live={live} /><div className="record-detail-tools"><button onClick={() => downloadJson({ schemaVersion: 1, exportedAt: new Date().toISOString(), battle: exportBattle(battle) }, `gbf-battle-${battle.raidId}.json`)}>导出当前战斗 JSON</button></div></>;
 }
 
+/** 在“当前战斗”和“历史记录”之间复用同一详情组件，并管理导出/删除操作。 */
 export function BattlePanel({ state, revision, mode, listening, onSnapshot }: {
   state: BattleSnapshot; revision: number; mode: "battle" | "history"; listening: boolean; onSnapshot: (snapshot: DebugSnapshot) => void;
 }): React.JSX.Element {
@@ -36,6 +39,7 @@ export function BattlePanel({ state, revision, mode, listening, onSnapshot }: {
   useEffect(() => {
     if (mode === "history") panelRef.current?.parentElement?.scrollTo({ top: 0 });
   }, [selectedId, mode]);
+  /** 历史操作共享忙碌状态，防止重复点击并集中展示错误。 */
   async function run(work: () => Promise<void>): Promise<void> {
     setBusy(true); setError(null);
     try { await work(); } catch (reason: unknown) { setError(reason instanceof Error ? reason.message : "操作失败。"); }

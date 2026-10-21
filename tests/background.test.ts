@@ -111,11 +111,14 @@ test("拒绝页面控制、非法 sender、无关接口和畸形消息", async (
   assert.ok(payload);
   for (const sender of [app.panel, { ...app.content(), id: "other" }, { ...app.content(), url: "https://example.com" }]) await app.send({ type: "AJAX_CAPTURED", payload }, sender);
   await app.send({ type: "AJAX_CAPTURED", payload: { ...payload, url: "https://example.com" } }, app.content());
+  await app.send({ type: "AJAX_CAPTURED", payload: { ...payload, url: "https://gbf.game.mbga.jp/debug/example" } }, app.content());
   assert.equal((await app.get()).captures.length, 0);
   await app.send({ type: "START_LISTENING", tabId: 9 });
   assert.equal((await app.get()).tabId, 7);
   app.handlers.updated?.(7, { url: "https://example.com" }, { id: 7 } as chrome.tabs.Tab);
-  assert.equal((await app.get()).listening, false);
+  const detached = await app.get();
+  assert.equal(detached.listening, false);
+  assert.equal(detached.battle.currentId, null);
 });
 
 test("worker 重启恢复会话和记录；断连与 storage 失败不阻塞后续查询", async () => {
@@ -205,4 +208,20 @@ test("切换来源隔离当前战斗；本地记录保存失败时 Debug 和统�
   assert.equal(switched.battle.records.length, 1);
   await app.send({ type: "CLEAR_BATTLE_RECORDS" });
   assert.equal((await app.get()).battle.records.length, 0);
+});
+
+test("来源关闭后撤销战斗关联，复用相同 tab ID 不续接旧战斗", async () => {
+  const app = await harness();
+  await app.send({ type: "START_LISTENING", tabId: 7 });
+  const control = await app.send({ type: "PAGE_BRIDGE_READY" }, app.content()) as ListenerControl;
+  await app.send({ type: "AJAX_CAPTURED", payload: battleCapture("start", startBody(), { sessionId: control.sessionId! }) }, app.content());
+  assert.equal((await app.get()).battle.currentId, "1001");
+
+  app.handlers.removed?.(7, { windowId: 1, isWindowClosing: false });
+  const detached = await app.get();
+  assert.equal(detached.battle.currentId, null);
+  assert.equal(detached.battle.records.length, 1);
+
+  await app.send({ type: "START_LISTENING", tabId: 7 });
+  assert.equal((await app.get()).battle.currentId, null);
 });
